@@ -391,6 +391,7 @@ if __name__ == "__main__":
         warmup_steps=args.warmup_steps,
         gradient_accumulation_steps=args.gradient_accumulation_steps,
         gradient_checkpointing=args.gradient_checkpointing,
+        gradient_checkpointing_kwargs={'use_reentrant': True} if args.gradient_checkpointing else None,
         weight_decay=args.weight_decay,
         report_to="wandb",
         load_best_model_at_end=True,
