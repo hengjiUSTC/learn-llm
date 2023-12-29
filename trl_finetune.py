@@ -178,6 +178,11 @@ if __name__ == "__main__":
         help="Add PAD token to tokenizer",
         default=False,
     )
+    parser.add_argument(
+        "--padding_side",
+        help="Add padding side token to tokenizer",
+        default=None,
+    )
 
     parser.add_argument(
         "--train_dataset_ratio",
@@ -258,6 +263,9 @@ if __name__ == "__main__":
         logger.info("Using pad token id %d", args.pad_token_id)
         tokenizer.pad_token_id = args.pad_token_id
         tokenizer.pad_token = tokenizer.convert_ids_to_tokens(args.pad_token_id)
+    
+    if args.padding_side is not None:
+        tokenizer.padding_side = args.padding_side
 
     special_tokens_dict = dict()
     if tokenizer.pad_token is None:
