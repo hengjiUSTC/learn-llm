@@ -8,7 +8,7 @@
       "min_loss_scale": 1
   },
   "bf16":{
-      "enabled":"auto"
+      "enabled": false
   },    
   "optimizer": {
       "type": "AdamW",
@@ -31,11 +31,11 @@
       "stage": 3,
       "offload_optimizer": {
           "device": "cpu",
-          "pin_memory": false
+          "pin_memory": true
       },
       "offload_param": {
           "device": "cpu",
-          "pin_memory": false
+          "pin_memory": true
       },
       "overlap_comm": true,
       "contiguous_gradients": true,
@@ -54,3 +54,34 @@
   "train_micro_batch_size_per_gpu": "auto",
   "wall_clock_breakdown": false
 }
+
+
+compute_environment: LOCAL_MACHINE
+deepspeed_config:
+ deepspeed_config_file: /home/ubuntu/accelerate/examples/configs/deepspeed_config_templates/zero_stage2_config.json
+ zero3_init_flag: true
+distributed_type: DEEPSPEED
+fsdp_config: {}
+machine_rank: 0
+main_process_ip: null
+main_process_port: null
+main_training_function: main
+mixed_precision: fp16
+num_machines: 1
+num_processes: 2
+use_cpu: false
+
+compute_environment: LOCAL_MACHINE
+deepspeed_config:
+ deepspeed_config_file: /home/ubuntu/learn-llm/configs/zero_stage3_config.json
+ zero3_init_flag: true
+distributed_type: DEEPSPEED
+fsdp_config: {}
+machine_rank: 0
+main_process_ip: null
+main_process_port: null
+main_training_function: main
+mixed_precision: fp16
+num_machines: 1
+num_processes: 4
+use_cpu: false
