@@ -263,7 +263,7 @@ if __name__ == "__main__":
         logger.info("Using pad token id %d", args.pad_token_id)
         tokenizer.pad_token_id = args.pad_token_id
         tokenizer.pad_token = tokenizer.convert_ids_to_tokens(args.pad_token_id)
-    
+
     if args.padding_side is not None:
         tokenizer.padding_side = args.padding_side
 
@@ -399,10 +399,11 @@ if __name__ == "__main__":
         warmup_steps=args.warmup_steps,
         gradient_accumulation_steps=args.gradient_accumulation_steps,
         gradient_checkpointing=args.gradient_checkpointing,
-        gradient_checkpointing_kwargs={'use_reentrant': True} if args.gradient_checkpointing else None,
+        gradient_checkpointing_kwargs={"use_reentrant": False}
+        if args.gradient_checkpointing
+        else None,
         weight_decay=args.weight_decay,
         report_to="wandb",
-        load_best_model_at_end=True,
         save_total_limit=args.save_limit,
         bf16=True if torch.cuda.is_bf16_supported() else False,
         fp16=False if torch.cuda.is_bf16_supported() else True,
