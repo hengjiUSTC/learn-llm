@@ -22,7 +22,7 @@ save_steps: 10  # Model saving step frequency
 epochs: 1  # Number of training epochs
 batch_size: 2  # Training batch size
 gradient_accumulation_steps: 2  # Gradient accumulation steps
-gradient_checkpointing: false  # Enable gradient checkpointing
+gradient_checkpointing: true  # Enable gradient checkpointing
 trust_remote_code: true  # Trust remote code flag
 save_limit: 1  # Limit for saving models
 
