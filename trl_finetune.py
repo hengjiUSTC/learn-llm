@@ -216,9 +216,7 @@ if __name__ == "__main__":
 
     args = load_config(args.config)
 
-    train_dataset, validation_dataset = load_and_process_datasets(
-        args.datasets, args.val_data_size
-    )
+    train_dataset, validation_dataset = load_and_process_datasets(args)
 
     if args.lora_alpha is None:
         args.lora_alpha = args.lora_rank * 2
