@@ -1,7 +1,6 @@
 import argparse
 import os
-from typing import Dict
-import pandas as pd
+from typing import Dict, List, Optional
 import torch
 from trl import SFTTrainer, DataCollatorForCompletionOnlyLM
 from transformers import (
@@ -14,10 +13,13 @@ from transformers import (
     PreTrainedModel,
 )
 from peft import LoraConfig, TaskType, get_peft_model, prepare_model_for_kbit_training
-from datasets import Dataset
+from datasets import load_dataset, concatenate_datasets
 from accelerate import Accelerator
 import bitsandbytes as bnb
+import yaml
 from utils import get_logger
+from dataclasses import dataclass, field
+
 
 logger = get_logger("finetune", "info")
 
@@ -26,6 +28,106 @@ DEFAULT_PAD_TOKEN = "[PAD]"
 DEFAULT_EOS_TOKEN = "</s>"
 DEFAULT_BOS_TOKEN = "<s>"
 DEFAULT_UNK_TOKEN = "<unk>"
+
+
+@dataclass
+class DatasetConfig:
+    path: str  # Path to the dataset
+    split: str  # Dataset split (e.g., 'train', 'test')
+    type: dict  # Additional configuration for the dataset
+
+
+@dataclass
+class Config:
+    # Training and validation file paths
+    val_data_size: float  # Validation data size ratio
+
+    # Model configuration
+    model_name: str  # Name of the model
+    token: Optional[str] = None  # Authentication token, if required
+    split_model: bool = False  # Whether to split the model
+
+    # Model training parameters
+    block_size: int = 128  # Size of the blocks used in the model
+    lora_rank: int = 64  # LoRA rank
+    lora_alpha: Optional[int] = None  # Alpha value for LoRA
+    lora_dropout: float = 0.1  # Dropout rate for LoRA
+    learning_rate: float = 1e-4  # Learning rate
+    lr_scheduler_type: str = "constant"  # Type of learning rate scheduler
+    warmup_steps: int = 10  # Number of warmup steps
+    weight_decay: float = 0.05  # Weight decay factor
+    output_dir: str = "./checkpoints"  # Directory to save model checkpoints
+    log_steps: int = 10  # Frequency of logging steps
+    eval_steps: int = 10  # Evaluation step frequency
+    save_steps: int = 10  # Model saving step frequency
+    epochs: float = 1  # Number of training epochs
+    batch_size: int = 1  # Training batch size
+    gradient_accumulation_steps: int = 1  # Gradient accumulation steps
+    gradient_checkpointing: bool = False  # Enable gradient checkpointing
+    trust_remote_code: bool = False  # Trust remote code flag
+    save_limit: int = 1  # Limit for saving models
+
+    # Additional model configuration
+    use_int4: bool = False  # Use int4 precision
+    use_int8: bool = False  # Use int8 precision
+    disable_lora: bool = False  # Disable LoRA
+    disable_flash_attention: bool = False  # Disable flash attention
+    all_linear: bool = False  # Use LoRA on all linear layers
+    long_lora: bool = False  # Use long LoRA settings
+    rope_scale: Optional[float] = None  # ROPE scale value
+    pad_token_id: Optional[int] = None  # End of sequence token ID
+    add_eos_token: bool = False  # Add EOS token to tokenizer
+    add_bos_token: bool = False  # Add BOS token to tokenizer
+    add_pad_token: bool = False  # Add PAD token to tokenizer
+    padding_side: Optional[str] = None  # Padding side for tokenizer
+
+    # Dataset handling
+    train_dataset_ratio: float = 1.0  # Ratio of the training dataset to use
+    validation_dataset_ratio: float = 1.0  # Ratio of the validation dataset to use
+    completion_only: bool = False  # Only use completion loss
+    wand_db_project: str = "trl_finetuning"  # Wandb project to use
+    datasets: List[DatasetConfig] = field(
+        default_factory=list
+    )  # List of dataset configurations
+
+
+def load_config(config_file):
+    with open(config_file, "r") as file:
+        config_dict = yaml.safe_load(file)
+    return Config(**config_dict)
+
+
+def load_and_process_datasets(config: Config):
+    def format_data(row, format_str):
+        return (
+            format_str.replace("{instruction}", row["instruction"])
+            .replace("{input}", row["input"])
+            .replace("{output}", row["output"])
+        )
+
+    def process_dataset(dataset, format_str):
+        return dataset.map(
+            lambda row: {"text": format_data(row, format_str)}
+        ).remove_columns([c for c in dataset.column_names if c != "text"])
+
+    # Load configuration
+
+    all_datasets = []
+    for dataset_config in config.datasets:
+        dataset = load_dataset(dataset_config["path"], split=dataset_config["split"])
+        format_str = dataset_config["type"]["format"]
+        processed_dataset = process_dataset(dataset, format_str)
+        all_datasets.append(processed_dataset)
+
+    combined_dataset = concatenate_datasets(all_datasets)
+
+    # Split data
+    split_dataset = combined_dataset.train_test_split(
+        test_size=config.val_data_size,
+        shuffle=True,
+    )
+
+    return split_dataset["train"], split_dataset["test"]
 
 
 def find_all_linear_names(args, model, add_lm_head=True):
@@ -109,101 +211,14 @@ def get_config(args):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument(
-        "-m", "--model_name", type=str, default="meta-llama/Llama-2-7b-hf"
-    )
-    parser.add_argument("-t", "--token", type=str, default=None)
-    parser.add_argument("--split_model", action="store_true", default=False)
-    parser.add_argument("--block_size", type=int, default=128)
-    parser.add_argument("--lora_rank", type=int, default=64)
-    parser.add_argument("--lora_alpha", type=int, default=None)
-    parser.add_argument("--lora_dropout", type=float, default=0.1)
-
-    parser.add_argument("-lr", "--learning_rate", type=float, default=1e-4)
-    parser.add_argument("--lr_scheduler_type", type=str, default="constant")
-    parser.add_argument("--warmup_steps", type=int, default=10)
-    parser.add_argument("--weight_decay", type=float, default=0.05)
-    parser.add_argument("-o", "--output_dir", type=str, default="./checkpoints")
-    parser.add_argument("--log_steps", type=int, default=10)
-    parser.add_argument("--eval_steps", type=int, default=10)
-    parser.add_argument("--save_steps", type=int, default=10)
-    parser.add_argument("-e", "--epochs", type=float, default=1)
-    parser.add_argument("-b", "--batch_size", type=int, default=1)
-    parser.add_argument("--gradient_accumulation_steps", type=int, default=1)
-    parser.add_argument("--gradient_checkpointing", action="store_true", default=False)
-    parser.add_argument("--trust_remote_code", action="store_true", default=False)
-
-    parser.add_argument("-tf", "--train_file", type=str, required=True)
-    parser.add_argument("-vf", "--validation_file", type=str, required=True)
-    parser.add_argument("-s", "--save_limit", type=int, default=1)
-
-    parser.add_argument("--use_int4", action="store_true", default=False)
-    parser.add_argument("--use_int8", action="store_true", default=False)
-    parser.add_argument("--disable_lora", action="store_true", default=False)
-    parser.add_argument(
-        "--disable_flash_attention",
-        action="store_true",
-        help="Disable flash attention",
-        default=False,
-    )
-    parser.add_argument(
-        "--all_linear",
-        action="store_true",
-        help="Use Lora on all linear layers",
-        default=False,
-    )
-    parser.add_argument(
-        "--long_lora", action="store_true", help="Use long lora settings", default=False
-    )
-    parser.add_argument("--rope_scale", type=float, default=None)
-
-    parser.add_argument(
-        "--pad_token_id", default=None, type=int, help="The end of sequence token."
-    )
-    parser.add_argument(
-        "--add_eos_token",
-        action="store_true",
-        help="Add EOS token to tokenizer",
-        default=False,
-    )
-    parser.add_argument(
-        "--add_bos_token",
-        action="store_true",
-        help="Add BOS token to tokenizer",
-        default=False,
-    )
-    parser.add_argument(
-        "--add_pad_token",
-        action="store_true",
-        help="Add PAD token to tokenizer",
-        default=False,
-    )
-    parser.add_argument(
-        "--padding_side",
-        help="Add padding side token to tokenizer",
-        default=None,
-    )
-
-    parser.add_argument(
-        "--train_dataset_ratio",
-        default=1.0,
-        type=float,
-        help="Ratio of the training dataset to use",
-    )
-    parser.add_argument(
-        "--validation_dataset_ratio",
-        default=1.0,
-        type=float,
-        help="Ratio of the validation dataset to use",
-    )
-
-    parser.add_argument(
-        "--completion_only",
-        default=False,
-        action="store_true",
-        help="Only use completion loss",
-    )
+    parser.add_argument("-c", "--config", type=str)
     args = parser.parse_args()
+
+    args = load_config(args.config)
+
+    train_dataset, validation_dataset = load_and_process_datasets(
+        args.datasets, args.val_data_size
+    )
 
     if args.lora_alpha is None:
         args.lora_alpha = args.lora_rank * 2
@@ -239,8 +254,7 @@ if __name__ == "__main__":
         logger.info("Using flash attention...")
         use_flash_attention = True
 
-    if "WANDB_PROJECT" not in os.environ:
-        os.environ["WANDB_PROJECT"] = "trl_finetuning"
+    os.environ["WANDB_PROJECT"] = args.wand_db_project
 
     if args.split_model:
         logger.info("Splitting the model across all available devices...")
@@ -408,19 +422,6 @@ if __name__ == "__main__":
         bf16=True if torch.cuda.is_bf16_supported() else False,
         fp16=False if torch.cuda.is_bf16_supported() else True,
     )
-
-    train_df = pd.read_csv(args.train_file)
-    if args.train_dataset_ratio < 1.0:
-        train_df = train_df.sample(
-            frac=args.train_dataset_ratio, random_state=args.seed
-        )
-    train_dataset = Dataset.from_pandas(train_df)
-    validation_df = pd.read_csv(args.validation_file)
-    if args.validation_dataset_ratio < 1.0:
-        validation_df = validation_df.sample(
-            frac=args.validation_dataset_ratio, random_state=args.seed
-        )
-    validation_dataset = Dataset.from_pandas(validation_df)
 
     if args.completion_only:
         logger.info("Using completion only loss...")

@@ -1,0 +1,54 @@
+# Validation data size ratio
+val_data_size: 0.1
+
+# Model Configuration
+model_name: "mistralai/Mistral-7B-v0.1"  # Name of the model
+token: null  # Authentication token, if required
+split_model: false  # Whether to split the model
+
+# Model Training Parameters
+block_size: 1024  # Size of the blocks used in the model
+lora_rank: 64  # LoRA rank
+lora_alpha: 16  # Alpha value for LoRA
+lora_dropout: 0.1  # Dropout rate for LoRA
+learning_rate: 0.0001  # Learning rate
+lr_scheduler_type: "constant"  # Type of learning rate scheduler
+warmup_steps: 10  # Number of warmup steps
+weight_decay: 0.05  # Weight decay factor
+output_dir: "./mix_tangshi"  # Directory to save model checkpoints
+log_steps: 10  # Frequency of logging steps
+eval_steps: 10  # Evaluation step frequency
+save_steps: 10  # Model saving step frequency
+epochs: 1  # Number of training epochs
+batch_size: 2  # Training batch size
+gradient_accumulation_steps: 4  # Gradient accumulation steps
+gradient_checkpointing: true  # Enable gradient checkpointing
+trust_remote_code: true  # Trust remote code flag
+save_limit: 1  # Limit for saving models
+
+# Additional Model Configuration
+use_int4: false  # Use int4 precision
+use_int8: false  # Use int8 precision
+disable_lora: false  # Disable LoRA
+disable_flash_attention: true  # Disable flash attention
+all_linear: true  # Use LoRA on all linear layers
+long_lora: false  # Use long LoRA settings
+rope_scale: null  # ROPE scale value
+pad_token_id: 0  # End of sequence token ID
+add_eos_token: false  # Add EOS token to tokenizer
+add_bos_token: false  # Add BOS token to tokenizer
+add_pad_token: false  # Add PAD token to tokenizer
+padding_side: null  # Padding side for tokenizer
+
+# Dataset Handling
+train_dataset_ratio: 1.0  # Ratio of the training dataset to use
+validation_dataset_ratio: 1.0  # Ratio of the validation dataset to use
+completion_only: false  # Only use completion loss
+wand_db_project: "mix_tangshi"  # Wandb project to use
+datasets:
+  - path: "HenryJJ/tangshi"  # Dataset path
+    split: "train"  # Dataset split
+    type:
+      system_prompt: ""  # System prompt
+      field_system: "system"  # Field system
+      format: "<s>[INST]{instruction} {input}[/INST]{output}</s>"  # Data format
