@@ -4,7 +4,7 @@ val_data_size: 0.1
 # Model Configuration
 model_name: "mistralai/Mistral-7B-v0.1"  # Name of the model
 token: null  # Authentication token, if required
-split_model: false  # Whether to split the model
+split_model: true  # Whether to split the model
 
 # Model Training Parameters
 block_size: 1024  # Size of the blocks used in the model
@@ -21,8 +21,8 @@ eval_steps: 10  # Evaluation step frequency
 save_steps: 10  # Model saving step frequency
 epochs: 1  # Number of training epochs
 batch_size: 2  # Training batch size
-gradient_accumulation_steps: 4  # Gradient accumulation steps
-gradient_checkpointing: true  # Enable gradient checkpointing
+gradient_accumulation_steps: 2  # Gradient accumulation steps
+gradient_checkpointing: false  # Enable gradient checkpointing
 trust_remote_code: true  # Trust remote code flag
 save_limit: 1  # Limit for saving models
 
@@ -41,8 +41,6 @@ add_pad_token: false  # Add PAD token to tokenizer
 padding_side: null  # Padding side for tokenizer
 
 # Dataset Handling
-train_dataset_ratio: 1.0  # Ratio of the training dataset to use
-validation_dataset_ratio: 1.0  # Ratio of the validation dataset to use
 completion_only: false  # Only use completion loss
 wand_db_project: "mix_tangshi"  # Wandb project to use
 datasets:
