@@ -43,6 +43,18 @@ python3 trl_finetune.py --config configs/mixtral_7b_tangshi.yml
 
 This command uses the mixtral_7b_tangshi.yml configuration file to fine-tune the "mixtral7b" model on the Tangshi dataset.
 
+```
+python3 merge.py --config configs/merge_mixtral_7b.yml
+```
+
+Merge lora with base model.
+
+```
+python3 inference.py --config configs/inference_mixtral.yml
+```
+
+Inference on merged model.
+
 ### Installation and Setup
 
 To set up the project, follow these steps:

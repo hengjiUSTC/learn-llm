@@ -1,0 +1,5 @@
+model_path: "merged"  # Replace with your model path
+prompt: |
+  <s>[INST]你是一个唐诗助手,帮助用户写一首对应要求的唐诗
+  作者:李白
+  标签:五言绝句;宫怨[/INST]
