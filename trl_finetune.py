@@ -13,7 +13,7 @@ from transformers import (
     PreTrainedModel,
 )
 from peft import LoraConfig, TaskType, get_peft_model, prepare_model_for_kbit_training
-from datasets import load_dataset, concatenate_datasets
+from datasets import load_dataset, concatenate_datasets, Dataset
 from accelerate import Accelerator
 import bitsandbytes as bnb
 import yaml
@@ -67,6 +67,9 @@ class Config:
     trust_remote_code: bool = False  # Trust remote code flag
     save_limit: int = 1  # Limit for saving models
 
+    # SFTTrainer configuration
+    packing: bool = False
+
     # Additional model configuration
     use_int4: bool = False  # Use int4 precision
     use_int8: bool = False  # Use int8 precision
@@ -82,10 +85,9 @@ class Config:
     padding_side: Optional[str] = None  # Padding side for tokenizer
 
     # Dataset handling
-    train_dataset_ratio: float = 1.0  # Ratio of the training dataset to use
-    validation_dataset_ratio: float = 1.0  # Ratio of the validation dataset to use
     completion_only: bool = False  # Only use completion loss
     wand_db_project: str = "trl_finetuning"  # Wandb project to use
+    prepare_data_path: Optional[str] = None  # dataset cache folder
     datasets: List[DatasetConfig] = field(
         default_factory=list
     )  # List of dataset configurations
@@ -98,28 +100,40 @@ def load_config(config_file):
 
 
 def load_and_process_datasets(config: Config):
-    def format_data(row, format_str):
-        return (
-            format_str.replace("{instruction}", row["instruction"])
-            .replace("{input}", row["input"])
-            .replace("{output}", row["output"])
-        )
+    def format_data(row, format_str, fields):
+        format_dict = {field: row[field] for field in fields}
+        return format_str.format(**format_dict)
 
-    def process_dataset(dataset, format_str):
+    def process_dataset(dataset, format_str, fields):
         return dataset.map(
-            lambda row: {"text": format_data(row, format_str)}
+            lambda row: {"text": format_data(row, format_str, fields)}
         ).remove_columns([c for c in dataset.column_names if c != "text"])
 
-    # Load configuration
+    # Check if cached dataset exists
+    if config.prepare_data_path and os.path.exists(config.prepare_data_path):
+        combined_dataset = Dataset.load_from_disk(config.prepare_data_path)
+    else:
+        # Process datasets if cache does not exist
+        all_datasets = []
+        for dataset_config in config.datasets:
+            fields = dataset_config["type"]["fields"].split(";")
+            name = dataset_config["name"] if "name" in dataset_config else None
+            path = dataset_config["path"]
+            dataset = load_dataset(path, split=dataset_config["split"], name=name)
+            format_str = dataset_config["type"]["format"]
+            processed_dataset = process_dataset(dataset, format_str, fields)
+            logger.info(f"Dataset format: {path}")
+            print(processed_dataset[0])
+            all_datasets.append(processed_dataset)
 
-    all_datasets = []
-    for dataset_config in config.datasets:
-        dataset = load_dataset(dataset_config["path"], split=dataset_config["split"])
-        format_str = dataset_config["type"]["format"]
-        processed_dataset = process_dataset(dataset, format_str)
-        all_datasets.append(processed_dataset)
+        combined_dataset = concatenate_datasets(all_datasets)
+        if len(combined_dataset) > 1:
+            logger.info("shuffle merged datasets")
+            combined_dataset = combined_dataset.shuffle()
 
-    combined_dataset = concatenate_datasets(all_datasets)
+        if config.prepare_data_path:
+            # Save combined dataset to disk
+            combined_dataset.save_to_disk(config.prepare_data_path)
 
     # Split data
     split_dataset = combined_dataset.train_test_split(
@@ -215,6 +229,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     args = load_config(args.config)
+    print(args)
 
     train_dataset, validation_dataset = load_and_process_datasets(args)
 
@@ -267,6 +282,7 @@ if __name__ == "__main__":
         add_eos_token=args.add_eos_token,
         add_bos_token=args.add_bos_token,
         use_fast=True,
+        truncation=True,
     )
 
     # THIS IS A HACK TO GET THE PAD TOKEN ID NOT TO BE EOS
@@ -328,14 +344,14 @@ if __name__ == "__main__":
         torch_dtype=torch_dtype,
         config=config,
         use_flash_attention_2=use_flash_attention,
-        **kwargs
+        **kwargs,
     )
     added_tokens = smart_tokenizer_and_embedding_resize(
         special_tokens_dict=special_tokens_dict,
         tokenizer=tokenizer,
         model=model,
     )
-
+    logger.info(f"tokenizer: {tokenizer}")
     if not args.disable_lora and args.all_linear:
         target_modules = find_all_linear_names(args, model)
         logger.info("Using LORA on all linear layers: %s", target_modules)
@@ -365,6 +381,7 @@ if __name__ == "__main__":
             modules_to_save = modules_to_save = ["embed_tokens", "lm_head"]
         else:
             modules_to_save = None
+        print(modules_to_save)
         peft_config = LoraConfig(
             task_type=TaskType.CAUSAL_LM,
             inference_mode=False,
@@ -434,7 +451,7 @@ if __name__ == "__main__":
         packing = False
     else:
         data_collator = None
-        packing = None
+        packing = args.packing
 
     # get trainer
     trainer = SFTTrainer(
