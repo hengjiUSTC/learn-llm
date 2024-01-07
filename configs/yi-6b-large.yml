@@ -1,0 +1,63 @@
+# Validation data size ratio
+val_data_size: 0.05
+
+# Model Configuration
+model_name: "01-ai/Yi-6B"  # Name of the model
+token: null  # Authentication token, if required
+split_model: true  # Whether to split the model
+
+# Model Training Parameters
+block_size: 2048  # Size of the blocks used in the model
+lora_rank: 64  # LoRA rank
+lora_alpha: 16  # Alpha value for LoRA
+lora_dropout: 0.05  # Dropout rate for LoRA
+learning_rate: 0.0001  # Learning rate
+lr_scheduler_type: "cosine"  # Type of learning rate scheduler
+warmup_steps: 150  # Number of warmup steps
+weight_decay: 0.05  # Weight decay factor
+output_dir: "./yi_qlora_dolly-code"  # Directory to save model checkpoints
+log_steps: 150  # Frequency of logging steps
+eval_steps: 150  # Evaluation step frequency
+save_steps: 500  # Model saving step frequency
+epochs: 2  # Number of training epochs
+batch_size: 2  # Training batch size
+gradient_accumulation_steps: 4  # Gradient accumulation steps
+gradient_checkpointing: true  # Enable gradient checkpointing
+trust_remote_code: true  # Trust remote code flag
+save_limit: 1  # Limit for saving models
+
+# SFTTrainer configuration
+packing: true
+
+# Additional Model Configuration
+use_int4: false  # Use int4 precision
+use_int8: false  # Use int8 precision
+disable_lora: false  # Disable LoRA
+disable_flash_attention: true  # Disable flash attention
+all_linear: true  # Use LoRA on all linear layers
+long_lora: false  # Use long LoRA settings
+rope_scale: null  # ROPE scale value
+add_eos_token: false  # Add EOS token to tokenizer
+add_bos_token: false  # Add BOS token to tokenizer
+add_pad_token: false  # Add PAD token to tokenizer
+padding_side: "right"  # Padding side for tokenizer
+
+# Dataset Handling
+completion_only: false  # Only use completion loss
+wand_db_project: "yi_qlora_dolly-code"  # Wandb project to use
+datasets:
+  - path: "databricks/databricks-dolly-15k"  # Dataset path
+    split: "train"  # Dataset split
+    type:
+      system_prompt: ""  # System prompt
+      field_system: "system"  # Field system
+      fields: "instruction;context;response"
+      format: "<|startoftext|>[INST]{instruction} {context}[/INST]{response}<|endoftext|>"  # Data format
+  - path: "lucasmccabe-lmi/CodeAlpaca-20k"  # Dataset path
+    split: "train"  # Dataset split
+    type:
+      system_prompt: ""  # System prompt
+      field_system: "system"  # Field system
+      fields: "instruction;input;output"
+      format: "<|startoftext|>[INST]{instruction} {input}[/INST]{output}<|endoftext|>"  # Data format
+prepare_data_path: 'prepare_yi_qlora_dolly-code'
