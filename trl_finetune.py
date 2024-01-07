@@ -266,7 +266,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     args = load_config(args.config)
-    logger.info(args)
+    print(args)
 
     train_dataset, validation_dataset = load_and_process_datasets(args)
 
