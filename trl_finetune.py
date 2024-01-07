@@ -1,4 +1,5 @@
 import argparse
+import math
 import os
 from typing import Dict, List, Optional
 import torch
@@ -13,21 +14,19 @@ from transformers import (
     PreTrainedModel,
 )
 from peft import LoraConfig, TaskType, get_peft_model, prepare_model_for_kbit_training
-from datasets import load_dataset, concatenate_datasets, Dataset
+from datasets import concatenate_datasets, Dataset
 from accelerate import Accelerator
 import bitsandbytes as bnb
 import yaml
+import dataloader
 from utils import get_logger
 from dataclasses import dataclass, field
+import inspect
 
 
 logger = get_logger("finetune", "info")
 
 SUPPORTED_FLASH_MODELS = ["llama", "mistral", "falcon", "mixtral", "opt"]
-DEFAULT_PAD_TOKEN = "[PAD]"
-DEFAULT_EOS_TOKEN = "</s>"
-DEFAULT_BOS_TOKEN = "<s>"
-DEFAULT_UNK_TOKEN = "<unk>"
 
 
 @dataclass
@@ -83,6 +82,9 @@ class Config:
     add_bos_token: bool = False  # Add BOS token to tokenizer
     add_pad_token: bool = False  # Add PAD token to tokenizer
     padding_side: Optional[str] = None  # Padding side for tokenizer
+    # New field for special tokens
+    special_tokens: Dict[str, str] = field(default_factory=lambda: {})
+    custom_tokens: List[str] = field(default_factory=list)  # List of custom_tokens
 
     # Dataset handling
     completion_only: bool = False  # Only use completion loss
@@ -100,31 +102,28 @@ def load_config(config_file):
 
 
 def load_and_process_datasets(config: Config):
-    def format_data(row, format_str, fields):
-        format_dict = {field: row[field] for field in fields}
-        return format_str.format(**format_dict)
-
-    def process_dataset(dataset, format_str, fields):
-        return dataset.map(
-            lambda row: {"text": format_data(row, format_str, fields)}
-        ).remove_columns([c for c in dataset.column_names if c != "text"])
-
     # Check if cached dataset exists
     if config.prepare_data_path and os.path.exists(config.prepare_data_path):
         combined_dataset = Dataset.load_from_disk(config.prepare_data_path)
     else:
+        # Create a dictionary of handler functions from dataloader.py
+        handler_functions = {
+            name: func
+            for name, func in inspect.getmembers(dataloader, inspect.isfunction)
+            if name.startswith("handle_")  # Assuming all handlers start with 'handle_'
+        }
+
         # Process datasets if cache does not exist
         all_datasets = []
         for dataset_config in config.datasets:
-            fields = dataset_config["type"]["fields"].split(";")
-            name = dataset_config["name"] if "name" in dataset_config else None
-            path = dataset_config["path"]
-            dataset = load_dataset(path, split=dataset_config["split"], name=name)
-            format_str = dataset_config["type"]["format"]
-            processed_dataset = process_dataset(dataset, format_str, fields)
-            logger.info(f"Dataset format: {path}")
-            print(processed_dataset[0])
-            all_datasets.append(processed_dataset)
+            dataset_handler = dataset_config["handler"]
+            if dataset_handler in handler_functions:
+                handler_function = handler_functions[dataset_handler]
+                processed_dataset = handler_function(dataset_config)
+                print(processed_dataset[0])
+                all_datasets.append(processed_dataset)
+            else:
+                raise Exception(f"Unsupported dataset handler: {dataset_handler}")
 
         combined_dataset = concatenate_datasets(all_datasets)
         if len(combined_dataset) > 1:
@@ -163,46 +162,84 @@ def find_all_linear_names(args, model, add_lm_head=True):
     return list(lora_module_names)
 
 
+def handle_model(model, tokenizer):
+    if (
+        hasattr(model, "config")
+        and hasattr(model.config, "bos_token_id")
+        and model.config.bos_token_id
+        and model.config.bos_token_id != tokenizer.bos_token_id
+    ):
+        model.config.bos_token_id = tokenizer.bos_token_id
+
+    if (
+        hasattr(model, "config")
+        and hasattr(model.config, "eos_token_id")
+        and model.config.eos_token_id
+        and model.config.eos_token_id != tokenizer.eos_token_id
+    ):
+        model.config.eos_token_id = tokenizer.eos_token_id
+
+
 def smart_tokenizer_and_embedding_resize(
     special_tokens_dict: Dict,
     tokenizer: PreTrainedTokenizer,
     model: PreTrainedModel,
+    custom_tokens: Optional[List[str]] = None,
 ):
     """Resize tokenizer and embedding.
 
-    Note: This is the optimized version that removes the custom_tokens parameter.
+    Note: This is the unoptimized version that may make your embedding size not be divisible by 64.
     """
 
-    if len(list(special_tokens_dict.keys())) > 0:
+    if len(list(special_tokens_dict.keys())) > 0 or custom_tokens is not None:
         logger.info("Resizing tokenizer and embedding...")
         logger.info("Special tokens dict: %s", special_tokens_dict)
+        logger.info("Custom tokens: %s", custom_tokens)
     else:
         return False
-    num_new_tokens = len(list(special_tokens_dict.keys()))
-    logger.info(
-        "Number of new tokens: %d, Special tokens dict: %s",
-        num_new_tokens,
-        special_tokens_dict,
+
+    num_new_tokens = 0
+    if len(list(special_tokens_dict.keys())) > 0:
+        num_new_tokens += tokenizer.add_special_tokens(special_tokens_dict)
+    if custom_tokens is not None:
+        num_new_tokens += tokenizer.add_tokens(custom_tokens, special_tokens=True)
+    logger.info("Number of new tokens: %d", num_new_tokens)
+
+    bos_or_eos_in_special_tokens = (
+        "bos_token" in special_tokens_dict or "eos_token" in special_tokens_dict
     )
-    tokenizer.add_special_tokens(special_tokens_dict)
-
-    model.resize_token_embeddings(len(tokenizer))
-
-    if num_new_tokens > 0:
-        input_embeddings = model.get_input_embeddings().weight.data
-        output_embeddings = model.get_output_embeddings().weight.data
-
-        input_embeddings_avg = input_embeddings[:-num_new_tokens].mean(
-            dim=0, keepdim=True
+    if (
+        tokenizer.__class__.__name__
+        in (
+            "LlamaTokenizerFast",
+            "CodeLlamaTokenizerFast",
         )
-        output_embeddings_avg = output_embeddings[:-num_new_tokens].mean(
-            dim=0, keepdim=True
-        )
+        and bos_or_eos_in_special_tokens
+    ):
+        logger.info("Tokenizer: update_post_processor")
+        tokenizer.update_post_processor()
 
-        input_embeddings[-num_new_tokens:] = input_embeddings_avg
-        output_embeddings[-num_new_tokens:] = output_embeddings_avg
+    if model.get_input_embeddings().num_embeddings < len(tokenizer):
+        logger.info("Resize model: %d", len(tokenizer))
+        model.resize_token_embeddings(len(tokenizer))
 
-    return True
+        if num_new_tokens > 0:
+            input_embeddings = model.get_input_embeddings().weight.data
+            output_embeddings = model.get_output_embeddings().weight.data
+
+            input_embeddings_avg = input_embeddings[:-num_new_tokens].mean(
+                dim=0, keepdim=True
+            )
+            output_embeddings_avg = output_embeddings[:-num_new_tokens].mean(
+                dim=0, keepdim=True
+            )
+
+            input_embeddings[-num_new_tokens:] = input_embeddings_avg
+            output_embeddings[-num_new_tokens:] = output_embeddings_avg
+
+        return True
+    handle_model(model=model, tokenizer=tokenizer)
+    return False
 
 
 def get_config(args):
@@ -229,7 +266,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     args = load_config(args.config)
-    print(args)
+    logger.info(args)
 
     train_dataset, validation_dataset = load_and_process_datasets(args)
 
@@ -295,16 +332,6 @@ if __name__ == "__main__":
     if args.padding_side is not None:
         tokenizer.padding_side = args.padding_side
 
-    special_tokens_dict = dict()
-    if tokenizer.pad_token is None:
-        special_tokens_dict["pad_token"] = DEFAULT_PAD_TOKEN
-    if tokenizer.eos_token is None:
-        special_tokens_dict["eos_token"] = DEFAULT_EOS_TOKEN
-    if tokenizer.bos_token is None:
-        special_tokens_dict["bos_token"] = DEFAULT_BOS_TOKEN
-    if tokenizer.unk_token is None:
-        special_tokens_dict["unk_token"] = DEFAULT_UNK_TOKEN
-
     block_size = args.block_size
     logger.info("Using a block size of %d", block_size)
 
@@ -347,11 +374,13 @@ if __name__ == "__main__":
         **kwargs,
     )
     added_tokens = smart_tokenizer_and_embedding_resize(
-        special_tokens_dict=special_tokens_dict,
+        special_tokens_dict=args.special_tokens,
         tokenizer=tokenizer,
         model=model,
+        custom_tokens=args.custom_tokens,
     )
     logger.info(f"tokenizer: {tokenizer}")
+
     if not args.disable_lora and args.all_linear:
         target_modules = find_all_linear_names(args, model)
         logger.info("Using LORA on all linear layers: %s", target_modules)

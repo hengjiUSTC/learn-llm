@@ -46,8 +46,7 @@ wand_db_project: "mix_tangshi"  # Wandb project to use
 datasets:
   - path: "HenryJJ/tangshi"  # Dataset path
     split: "train"  # Dataset split
-    type:
-      system_prompt: ""  # System prompt
-      field_system: "system"  # Field system
-      fields: "instruction;input;output"
-      format: "<s>[INST]{instruction} {input}[/INST]{output}</s>"  # Data format
+    handler: "handle_instruction_dataset"
+    fields: "instruction;input;output"
+    format: |
+      <s>[INST]{instruction} {input}[/INST]{output}</s>

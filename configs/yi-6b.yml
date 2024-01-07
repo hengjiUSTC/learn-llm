@@ -48,16 +48,8 @@ wand_db_project: "yi_qlora_dolly-15k"  # Wandb project to use
 datasets:
   - path: "databricks/databricks-dolly-15k"  # Dataset path
     split: "train"  # Dataset split
-    type:
-      system_prompt: ""  # System prompt
-      field_system: "system"  # Field system
-      fields: "instruction;context;response"
-      format: "<|startoftext|>[INST]{instruction} {context}[/INST]{response}<|endoftext|>"  # Data format
-  # - path: "lucasmccabe-lmi/CodeAlpaca-20k"  # Dataset path
-  #   split: "train"  # Dataset split
-  #   type:
-  #     system_prompt: ""  # System prompt
-  #     field_system: "system"  # Field system
-  #     fields: "instruction;input;output"
-  #     format: "<|startoftext|>[INST]{instruction} {input}[/INST]{output}<|endoftext|>"  # Data format
+    handler: "handle_instruction_dataset"
+    fields: "instruction;input;output"
+    format: |
+      <|startoftext|>[INST]{instruction} {input}[/INST]{output}<|endoftext|>
 prepare_data_path: 'prepare_yi_dolly-15k'
