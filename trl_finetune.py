@@ -351,18 +351,24 @@ if __name__ == "__main__":
             kwargs["device_map"] = device_map
         optimizer = "adamw_bnb_8bit"
         args.use_int8 = False
+        torch_dtype = (
+            torch.bfloat16 if torch.cuda.is_bf16_supported() else torch.float16
+        )
     elif args.use_int8:
         logger.info("Using int8 quantization")
         bnb_config = BitsAndBytesConfig(
             load_in_8bit=True,
         )
         optimizer = "adamw_bnb_8bit"
+        torch_dtype = (
+            torch.bfloat16 if torch.cuda.is_bf16_supported() else torch.float16
+        )
     else:
         logger.info("Using no quantization")
         bnb_config = None
         optimizer = "adamw_torch"
+        torch_dtype = None
 
-    torch_dtype = torch.bfloat16 if torch.cuda.is_bf16_supported() else torch.float16
     model = AutoModelForCausalLM.from_pretrained(
         args.model_name,
         token=access_token,
@@ -481,7 +487,7 @@ if __name__ == "__main__":
     else:
         data_collator = None
         packing = args.packing
-
+    logger.info(training_args)
     # get trainer
     trainer = SFTTrainer(
         model=model,

@@ -53,6 +53,9 @@ datasets:
     handler: "handle_instruction_dataset"
     fields: "instruction;input;output"
     format: |
-      <|im_start|>system {instruction}<|im_end|>
-      <|im_start|>user {input}<|im_end|>
-      <|im_start|>assistant {output}<|im_end|>
+      <|im_start|>system
+      {instruction}<|im_end|>
+      <|im_start|>user
+      {input}<|im_end|>
+      <|im_start|>assistant
+      {output}<|im_end|>
