@@ -28,7 +28,7 @@ def perform_inference(config):
     # Perform the inference
     model.eval()
     with torch.no_grad():
-        output = model.generate(**model_input, max_new_tokens=500)[0]
+        output = model.generate(**model_input, max_new_tokens=500, temperature=0.7, do_sample=True)[0]
         print(tokenizer.decode(output, skip_special_tokens=True))
 
 

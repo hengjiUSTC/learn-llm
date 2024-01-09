@@ -45,8 +45,6 @@ if __name__ == "__main__":
 
     args.output = os.path.realpath(args.output)
 
-    LORA_WEIGHTS = os.path.realpath(args.lora_model)
-
     BASE_MODEL = args.base_model
     logger.info("Using base model %s", BASE_MODEL)
 
@@ -60,7 +58,7 @@ if __name__ == "__main__":
     tokenizer = AutoTokenizer.from_pretrained(
         args.lora_model,
     )
-
+    logger.info("Tokenizer %s", tokenizer)
     logger.info("Loading base model...")
     model = AutoModelForCausalLM.from_pretrained(
         BASE_MODEL,
@@ -68,6 +66,7 @@ if __name__ == "__main__":
         offload_folder="offload",
         trust_remote_code=True,
         quantization_config=None,
+        torch_dtype=torch.bfloat16 if torch.cuda.is_bf16_supported() else torch.float16,
     )
 
     if model.get_input_embeddings().num_embeddings < len(tokenizer):
@@ -94,7 +93,7 @@ if __name__ == "__main__":
 
     lora_model = PeftModel.from_pretrained(
         model,
-        LORA_WEIGHTS,
+        args.lora_model,
         torch_dtype=torch.bfloat16 if torch.cuda.is_bf16_supported() else torch.float16,
         device_map=device_map,
         offload_folder="offload",
