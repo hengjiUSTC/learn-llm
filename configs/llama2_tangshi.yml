@@ -16,7 +16,7 @@ learning_rate: 0.0001  # Learning rate
 lr_scheduler_type: "cosine"  # Type of learning rate scheduler
 warmup_steps: 30  # Number of warmup steps
 weight_decay: 0.05  # Weight decay factor
-output_dir: "./mix_tangshi"  # Directory to save model checkpoints
+output_dir: "./llama2_tangshi"  # Directory to save model checkpoints
 log_steps: 10  # Frequency of logging steps
 eval_steps: 10  # Evaluation step frequency
 save_steps: 30  # Model saving step frequency
@@ -28,6 +28,7 @@ trust_remote_code: true  # Trust remote code flag
 save_limit: 1  # Limit for saving models
 fp16: false
 bf16: true
+optimizer: "adamw_bnb_8bit"  # Optimizer to use
 
 # Additional Model Configuration
 use_int4: true  # Use int4 precision
@@ -44,7 +45,7 @@ packing: false
 
 # Dataset Handling
 completion_only: false  # Only use completion loss
-wand_db_project: "mix_tangshi"  # Wandb project to use
+wand_db_project: "llama2_tangshi"  # Wandb project to use
 datasets:
   - path: "HenryJJ/tangshi"  # Dataset path
     split: "train"  # Dataset split
