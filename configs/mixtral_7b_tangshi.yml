@@ -28,6 +28,7 @@ trust_remote_code: true  # Trust remote code flag
 save_limit: 1  # Limit for saving models
 fp16: false
 bf16: true
+optimizer: "adamw_bnb_8bit"  # Optimizer to use
 
 # Additional Model Configuration
 use_int4: true  # Use int4 precision
