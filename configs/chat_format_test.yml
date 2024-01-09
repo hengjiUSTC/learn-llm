@@ -32,8 +32,6 @@ use_int8: false  # Use int8 precision
 disable_lora: false  # Disable LoRA
 disable_flash_attention: true  # Disable flash attention
 all_linear: true  # Use LoRA on all linear layers
-long_lora: false  # Use long LoRA settings
-rope_scale: null  # ROPE scale value
 pad_token_id: 0  # End of sequence token ID
 add_eos_token: false  # Add EOS token to tokenizer
 add_bos_token: false  # Add BOS token to tokenizer

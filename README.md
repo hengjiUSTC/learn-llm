@@ -74,3 +74,9 @@ pip3 install -r requirements.txt
 ```
 
 This will install all the necessary Python packages as specified in the requirements.txt file.
+
+Eval with lm-evaluation-harness:
+
+```
+lm_eval --model hf --model_args pretrained=HenryJJ/Instruct_Yi-6B_Dolly15K,parallelize=True,dtype=auto,trust_remote_code=True --tasks truthfulqa --num_fewshot 0  --batch_size 8
+```

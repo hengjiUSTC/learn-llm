@@ -1,5 +1,4 @@
 import argparse
-import math
 import os
 from typing import Dict, List, Optional
 import torch
@@ -11,7 +10,7 @@ from transformers import (
     TrainingArguments,
     AutoConfig,
     PreTrainedTokenizer,
-    PreTrainedModel,
+    PreTrainedTokenizerFast,
 )
 from peft import LoraConfig, TaskType, get_peft_model, prepare_model_for_kbit_training
 from datasets import concatenate_datasets, Dataset
@@ -43,6 +42,9 @@ class Config:
 
     # Model configuration
     model_name: str  # Name of the model
+    model_dtype: Optional[
+        str
+    ] = None  # model datatype, only float16 or bfloat16 supported
     token: Optional[str] = None  # Authentication token, if required
     split_model: bool = False  # Whether to split the model
 
@@ -65,6 +67,9 @@ class Config:
     gradient_checkpointing: bool = False  # Enable gradient checkpointing
     trust_remote_code: bool = False  # Trust remote code flag
     save_limit: int = 1  # Limit for saving models
+    optimizer: str = "adamw_torch"
+    bf16: bool = False
+    fp16: bool = False
 
     # SFTTrainer configuration
     packing: bool = False
@@ -75,8 +80,6 @@ class Config:
     disable_lora: bool = False  # Disable LoRA
     disable_flash_attention: bool = False  # Disable flash attention
     all_linear: bool = False  # Use LoRA on all linear layers
-    long_lora: bool = False  # Use long LoRA settings
-    rope_scale: Optional[float] = None  # ROPE scale value
     pad_token_id: Optional[int] = None  # End of sequence token ID
     add_eos_token: bool = False  # Add EOS token to tokenizer
     add_bos_token: bool = False  # Add BOS token to tokenizer
@@ -162,7 +165,7 @@ def find_all_linear_names(args, model, add_lm_head=True):
     return list(lora_module_names)
 
 
-def handle_model(model, tokenizer):
+def update_model_special_token(model, tokenizer):
     if (
         hasattr(model, "config")
         and hasattr(model.config, "bos_token_id")
@@ -182,8 +185,7 @@ def handle_model(model, tokenizer):
 
 def smart_tokenizer_and_embedding_resize(
     special_tokens_dict: Dict,
-    tokenizer: PreTrainedTokenizer,
-    model: PreTrainedModel,
+    tokenizer: PreTrainedTokenizer | PreTrainedTokenizerFast,
     custom_tokens: Optional[List[str]] = None,
 ):
     """Resize tokenizer and embedding.
@@ -219,30 +221,10 @@ def smart_tokenizer_and_embedding_resize(
         logger.info("Tokenizer: update_post_processor")
         tokenizer.update_post_processor()
 
-    if model.get_input_embeddings().num_embeddings < len(tokenizer):
-        logger.info("Resize model: %d", len(tokenizer))
-        model.resize_token_embeddings(len(tokenizer))
-
-        if num_new_tokens > 0:
-            input_embeddings = model.get_input_embeddings().weight.data
-            output_embeddings = model.get_output_embeddings().weight.data
-
-            input_embeddings_avg = input_embeddings[:-num_new_tokens].mean(
-                dim=0, keepdim=True
-            )
-            output_embeddings_avg = output_embeddings[:-num_new_tokens].mean(
-                dim=0, keepdim=True
-            )
-
-            input_embeddings[-num_new_tokens:] = input_embeddings_avg
-            output_embeddings[-num_new_tokens:] = output_embeddings_avg
-
-        return True
-    handle_model(model=model, tokenizer=tokenizer)
     return False
 
 
-def get_config(args):
+def get_model_config(args: Config):
     config_kwargs = {
         "trust_remote_code": True if args.trust_remote_code else None,
         "token": args.token,
@@ -260,61 +242,9 @@ def get_config(args):
     return config
 
 
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
-    parser.add_argument("-c", "--config", type=str)
-    args = parser.parse_args()
-
-    args = load_config(args.config)
-    print(args)
-
-    train_dataset, validation_dataset = load_and_process_datasets(args)
-
-    if args.lora_alpha is None:
-        args.lora_alpha = args.lora_rank * 2
-        logger.info(
-            "Lora alpha set to None... Setting lora_alpha to %d", args.lora_alpha
-        )
-
-    # replace_llama_attn(use_full=False)
-
-    if args.token is None:
-        access_token = os.getenv("HF_TOKEN", "")
-    else:
-        access_token = args.token
-
-    if args.token is None:
-        args.token = access_token
-
-    config = get_config(args)
-    config_dict = config.to_dict()
-    model_type = config_dict["model_type"]
-
-    use_flash_attention = False
-
-    if not args.disable_flash_attention and model_type not in SUPPORTED_FLASH_MODELS:
-        logger.info(
-            "Model is not llama, mistral, or falcon disabling flash attention..."
-        )
-    elif args.disable_flash_attention and model_type in SUPPORTED_FLASH_MODELS:
-        logger.info(
-            "Model is llama, mistral or falcon could be using flash attention..."
-        )
-    elif not args.disable_flash_attention:
-        logger.info("Using flash attention...")
-        use_flash_attention = True
-
-    os.environ["WANDB_PROJECT"] = args.wand_db_project
-
-    if args.split_model:
-        logger.info("Splitting the model across all available devices...")
-        kwargs = {"device_map": "auto"}
-    else:
-        kwargs = {"device_map": None}
-
+def prepare_tokenizer(args: Config):
     tokenizer = AutoTokenizer.from_pretrained(
         args.model_name,
-        token=access_token,
         trust_remote_code=args.trust_remote_code,
         add_eos_token=args.add_eos_token,
         add_bos_token=args.add_bos_token,
@@ -332,46 +262,71 @@ if __name__ == "__main__":
     if args.padding_side is not None:
         tokenizer.padding_side = args.padding_side
 
-    block_size = args.block_size
-    logger.info("Using a block size of %d", block_size)
+    added_tokens = smart_tokenizer_and_embedding_resize(
+        special_tokens_dict=args.special_tokens,
+        tokenizer=tokenizer,
+        # model=model,
+        custom_tokens=args.custom_tokens,
+    )
+
+    return tokenizer, added_tokens
+
+
+def prepare_model(args: Config, tokenizer):
+    config = get_model_config(args)
+    config_dict = config.to_dict()
+    model_type = config_dict["model_type"]
+
+    use_flash_attention = False
+
+    if not args.disable_flash_attention and model_type not in SUPPORTED_FLASH_MODELS:
+        logger.info(
+            "Model is not llama, mistral, or falcon disabling flash attention..."
+        )
+    elif args.disable_flash_attention and model_type in SUPPORTED_FLASH_MODELS:
+        logger.info(
+            "Model is llama, mistral or falcon could be using flash attention..."
+        )
+    elif not args.disable_flash_attention:
+        logger.info("Using flash attention...")
+        use_flash_attention = True
+
+    if args.split_model:
+        logger.info("Splitting the model across all available devices...")
+        kwargs = {"device_map": "auto"}
+    else:
+        kwargs = {"device_map": None}
+
+    torch_dtype = torch.float32
+    if args.model_dtype == "float16":
+        torch_dtype = torch.float16
+    elif args.model_dtype == "bfloat16":
+        torch_dtype = torch.bfloat16
 
     if args.use_int4:
         logger.info("Using int4 quantization")
         bnb_config = BitsAndBytesConfig(
             load_in_4bit=True,
             bnb_4bit_quant_type="nf4",
-            bnb_4bit_compute_dtype=torch.bfloat16
-            if torch.cuda.is_bf16_supported()
-            else torch.float16,
+            bnb_4bit_compute_dtype=torch_dtype,
             bnb_4bit_use_double_quant=True,
         )
         if not args.split_model:
             device_index = Accelerator().process_index
             device_map = {"": device_index}
             kwargs["device_map"] = device_map
-        optimizer = "adamw_bnb_8bit"
         args.use_int8 = False
-        torch_dtype = (
-            torch.bfloat16 if torch.cuda.is_bf16_supported() else torch.float16
-        )
     elif args.use_int8:
         logger.info("Using int8 quantization")
         bnb_config = BitsAndBytesConfig(
             load_in_8bit=True,
         )
-        optimizer = "adamw_bnb_8bit"
-        torch_dtype = (
-            torch.bfloat16 if torch.cuda.is_bf16_supported() else torch.float16
-        )
     else:
         logger.info("Using no quantization")
         bnb_config = None
-        optimizer = "adamw_torch"
-        torch_dtype = None
 
     model = AutoModelForCausalLM.from_pretrained(
         args.model_name,
-        token=access_token,
         quantization_config=bnb_config,
         trust_remote_code=args.trust_remote_code,
         torch_dtype=torch_dtype,
@@ -379,13 +334,38 @@ if __name__ == "__main__":
         use_flash_attention_2=use_flash_attention,
         **kwargs,
     )
-    added_tokens = smart_tokenizer_and_embedding_resize(
-        special_tokens_dict=args.special_tokens,
-        tokenizer=tokenizer,
-        model=model,
-        custom_tokens=args.custom_tokens,
-    )
-    logger.info(f"tokenizer: {tokenizer}")
+
+    if model.get_input_embeddings().num_embeddings < len(tokenizer):
+        logger.info("Resize model: %d", len(tokenizer))
+        model.resize_token_embeddings(len(tokenizer))
+
+    update_model_special_token(model=model, tokenizer=tokenizer)
+
+    return model
+
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument("-c", "--config", type=str)
+    args = parser.parse_args()
+
+    args = load_config(args.config)
+    print(args)
+
+    train_dataset, validation_dataset = load_and_process_datasets(args)
+
+    # replace_llama_attn(use_full=False)
+
+    os.environ["WANDB_PROJECT"] = args.wand_db_project
+
+    tokenizer, added_tokens = prepare_tokenizer(args)
+
+    logger.info(f"added_tokens: {added_tokens} \ntokenizer: {tokenizer}")
+
+    block_size = args.block_size
+    logger.info("Using a block size of %d", block_size)
+
+    model = prepare_model(args=args, tokenizer=tokenizer)
 
     if not args.disable_lora and args.all_linear:
         target_modules = find_all_linear_names(args, model)
@@ -400,23 +380,11 @@ if __name__ == "__main__":
         logger.info("Using LORA on default layers")
 
     if not args.disable_lora:
-        if args.long_lora:
-            logger.info("Using long lora settings...")
-            modules_to_save = [
-                "embed_tokens",
-                "input_layernorm",
-                "post_attention_layernorm",
-                "norm",
-            ]
-
-            if added_tokens:
-                logger.info("Adding lm_head to modules_to_save")
-                modules_to_save.append("lm_head")
-        elif added_tokens:
+        if added_tokens:
             modules_to_save = modules_to_save = ["embed_tokens", "lm_head"]
         else:
             modules_to_save = None
-        print(modules_to_save)
+        logger.info(f"modules_to_save: {modules_to_save}")
         peft_config = LoraConfig(
             task_type=TaskType.CAUSAL_LM,
             inference_mode=False,
@@ -457,7 +425,7 @@ if __name__ == "__main__":
         logging_steps=args.log_steps,
         per_device_train_batch_size=args.batch_size,
         per_device_eval_batch_size=args.batch_size * 2,
-        optim=optimizer,
+        optim=args.optimizer,
         learning_rate=args.learning_rate,
         lr_scheduler_type=args.lr_scheduler_type,
         warmup_steps=args.warmup_steps,
@@ -469,8 +437,8 @@ if __name__ == "__main__":
         weight_decay=args.weight_decay,
         report_to="wandb",
         save_total_limit=args.save_limit,
-        bf16=True if torch.cuda.is_bf16_supported() else False,
-        fp16=False if torch.cuda.is_bf16_supported() else True,
+        bf16=args.bf16,
+        fp16=args.fp16,
     )
 
     if args.completion_only:

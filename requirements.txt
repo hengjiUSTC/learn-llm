@@ -21,9 +21,11 @@ deepspeed==0.12.6
 dill==0.3.7
 docker-pycreds==0.4.0
 docstring-parser==0.15
+# einops==0.7.0
 exceptiongroup==1.2.0
 executing==2.0.1
 filelock==3.13.1
+# flash-attn==2.4.2
 frozenlist==1.4.1
 fsspec==2023.10.0
 gitdb==4.0.11

@@ -3,6 +3,7 @@ val_data_size: 0.1
 
 # Model Configuration
 model_name: NousResearch/Llama-2-7b-hf  # Name of the model
+model_dtype: "bfloat16"
 token: null  # Authentication token, if required
 split_model: false  # Whether to split the model
 
@@ -25,6 +26,8 @@ gradient_accumulation_steps: 2  # Gradient accumulation steps
 gradient_checkpointing: true  # Enable gradient checkpointing
 trust_remote_code: true  # Trust remote code flag
 save_limit: 1  # Limit for saving models
+fp16: false
+bf16: true
 
 # Additional Model Configuration
 use_int4: true  # Use int4 precision
@@ -32,8 +35,6 @@ use_int8: false  # Use int8 precision
 disable_lora: false  # Disable LoRA
 disable_flash_attention: false  # Disable flash attention
 all_linear: true  # Use LoRA on all linear layers
-long_lora: false  # Use long LoRA settings
-rope_scale: null  # ROPE scale value
 pad_token_id: 0  # End of sequence token ID
 add_eos_token: false  # Add EOS token to tokenizer
 add_bos_token: false  # Add BOS token to tokenizer

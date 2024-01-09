@@ -3,6 +3,7 @@ val_data_size: 0.05
 
 # Model Configuration
 model_name: "01-ai/Yi-6B"  # Name of the model
+model_dtype: "bfloat16"
 token: null  # Authentication token, if required
 split_model: true  # Whether to split the model
 
@@ -25,6 +26,8 @@ gradient_accumulation_steps: 4  # Gradient accumulation steps
 gradient_checkpointing: true  # Enable gradient checkpointing
 trust_remote_code: true  # Trust remote code flag
 save_limit: 1  # Limit for saving models
+fp16: false
+bf16: true
 
 # SFTTrainer configuration
 packing: true
@@ -35,8 +38,6 @@ use_int8: false  # Use int8 precision
 disable_lora: false  # Disable LoRA
 disable_flash_attention: true  # Disable flash attention
 all_linear: true  # Use LoRA on all linear layers
-long_lora: false  # Use long LoRA settings
-rope_scale: null  # ROPE scale value
 add_eos_token: false  # Add EOS token to tokenizer
 add_bos_token: false  # Add BOS token to tokenizer
 add_pad_token: false  # Add PAD token to tokenizer
