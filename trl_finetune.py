@@ -385,6 +385,7 @@ if __name__ == "__main__":
             modules_to_save = ["embed_tokens", "lm_head"]
         else:
             modules_to_save = None
+        # modules_to_save = ["embed_tokens", "lm_head"]
         logger.info(f"modules_to_save: {modules_to_save}")
         peft_config = LoraConfig(
             task_type=TaskType.CAUSAL_LM,
