@@ -22,13 +22,22 @@ def perform_inference(config):
         config["model_path"], trust_remote_code=True
     )
 
-    # Prepare the input
-    model_input = tokenizer(config["prompt"], return_tensors="pt").to("cuda")
-
+    # test the input
+    decode = tokenizer.decode(tokenizer(config["prompt"])["input_ids"])
+    print(f"input decode:\n{decode}")
     # Perform the inference
+    model_input = tokenizer(config["prompt"], return_tensors="pt").to("cuda")
+    print(f"input:\n{model_input}")
     model.eval()
     with torch.no_grad():
-        output = model.generate(**model_input, max_new_tokens=500, temperature=0.7, do_sample=True)[0]
+        output = model.generate(
+            **model_input,
+            max_new_tokens=500,
+            temperature=0.7,
+            do_sample=True,
+            eos_token_id=tokenizer.eos_token_id,
+            pad_token_id=tokenizer.pad_token_id,
+        )[0]
         print(tokenizer.decode(output, skip_special_tokens=True))
 
 

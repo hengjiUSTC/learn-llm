@@ -39,6 +39,33 @@ def handle_instruction_dataset(dataset_config):
     return formatted_data
 
 
+# Formatting functions
+def format_instruction_dolly_data(row, format_str, format_str_no_input, fields):
+    if row["context"] != "":
+        format_dict = {field: row[field] for field in fields}
+        return format_str.format(**format_dict)
+    else:
+        format_dict = {"instruction": row["instruction"], "response": row["response"]}
+        return format_str_no_input.format(**format_dict)
+
+
+# Specific dataset handlers
+def handle_instruction_dolly_dataset(dataset_config):
+    fields = dataset_config["fields"].split(";")
+    format_str = dataset_config["format"]
+    format_str_no_input = dataset_config["format_no_input"]
+    name = dataset_config["name"] if "name" in dataset_config else None
+    path = dataset_config["path"]
+    dataset = load_dataset(path, split=dataset_config["split"], name=name)
+    formatted_data = map_dataset(
+        dataset,
+        lambda row: format_instruction_dolly_data(
+            row, format_str, format_str_no_input, fields
+        ),
+    )
+    return formatted_data
+
+
 def handle_chat_1_dataset(dataset_config):
     fields = dataset_config["fields"]
     name = dataset_config["name"] if "name" in dataset_config else None

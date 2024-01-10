@@ -101,7 +101,6 @@ class Config:
 def load_config(config_file):
     with open(config_file, "r") as file:
         config_dict = yaml.safe_load(file)
-    config_dict = {k: v for k, v in config_dict.items() if v is not None}
     return Config(**config_dict)
 
 
@@ -222,7 +221,7 @@ def smart_tokenizer_and_embedding_resize(
         logger.info("Tokenizer: update_post_processor")
         tokenizer.update_post_processor()
 
-    return False
+    return num_new_tokens != 0
 
 
 def get_model_config(args: Config):
@@ -266,7 +265,6 @@ def prepare_tokenizer(args: Config):
     added_tokens = smart_tokenizer_and_embedding_resize(
         special_tokens_dict=args.special_tokens,
         tokenizer=tokenizer,
-        # model=model,
         custom_tokens=args.custom_tokens,
     )
 
