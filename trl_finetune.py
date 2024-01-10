@@ -102,6 +102,7 @@ class Config:
 def load_config(config_file):
     with open(config_file, "r") as file:
         config_dict = yaml.safe_load(file)
+    config_dict = {k: v for k, v in config_dict.items() if v is not None}
     return Config(**config_dict)
 
 
