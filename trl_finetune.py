@@ -96,6 +96,7 @@ class Config:
     datasets: List[DatasetConfig] = field(
         default_factory=list
     )  # List of dataset configurations
+    chat_template: Optional[str] = None
 
 
 def load_config(config_file):
@@ -251,6 +252,9 @@ def prepare_tokenizer(args: Config):
         use_fast=True,
         truncation=True,
     )
+
+    if args.chat_template:
+        tokenizer.chat_template = args.chat_template
 
     # THIS IS A HACK TO GET THE PAD TOKEN ID NOT TO BE EOS
     # good one for LLama is 18610, mixtral use 0

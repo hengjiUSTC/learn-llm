@@ -70,3 +70,4 @@ special_tokens:
   pad_token: "<|endoftext|>"
 custom_tokens:
   - "<|im_start|>"
+chat_template: "{% if not add_generation_prompt is defined %}{% set add_generation_prompt = false %}{% endif %}{% for message in messages %}{{'<|im_start|>' + message['role'] + ' ' + message['content'] + '<|im_end|>' + ' '}}{% endfor %}{% if add_generation_prompt %}{{ '<|im_start|>assistant ' }}{% endif %}"
