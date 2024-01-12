@@ -96,6 +96,9 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     args = load_config(args.config)
+
+    os.environ["WANDB_PROJECT"] = args.wand_db_project
+
     train_dataset, validation_dataset = loaddata(args)
     tokenizer, _ = prepare_tokenizer(args)
     logger.info(f"tokenizer: {tokenizer}")
