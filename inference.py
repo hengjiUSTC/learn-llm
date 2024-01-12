@@ -16,6 +16,7 @@ def perform_inference(config):
         device_map="auto",
         trust_remote_code=True,
     )
+    model.config.use_cache = True
 
     # Load the tokenizer
     tokenizer = AutoTokenizer.from_pretrained(

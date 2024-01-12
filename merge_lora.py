@@ -24,6 +24,7 @@ if __name__ == "__main__":
     args.use_int4 = False
     args.use_int8 = False
     args.disable_flash_attention = True
+    args.trust_remote_code = None
 
     output_dir = os.path.join(args.output_dir, "merged")
 

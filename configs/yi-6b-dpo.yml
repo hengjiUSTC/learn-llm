@@ -1,0 +1,59 @@
+# Validation data size ratio
+val_data_size: 0.05
+
+# Model Configuration
+# model_name: cognitivecomputations/dolphin-2.6-mistral-7b
+# model_name: mlabonne/NeuralHermes-2.5-Mistral-7B # Name of the model
+model_name: HenryJJ/Instruct_Yi-6B_Dolly15K
+model_dtype: "bfloat16"
+token: null  # Authentication token, if required
+split_model: false  # Whether to split the model
+
+# Model Training Parameters
+block_size: 1024  # Size of the blocks used in the model
+lora_rank: 16  # LoRA rank
+lora_alpha: 16  # Alpha value for LoRA
+lora_dropout: 0.05  # Dropout rate for LoRA
+learning_rate: 0.00005  # Learning rate
+lr_scheduler_type: "cosine"  # Type of learning rate scheduler
+warmup_steps: 200  # Number of warmup steps
+weight_decay: 0.05  # Weight decay factor
+output_dir: "./yi_dpo"  # Directory to save model checkpoints
+log_steps: 600  # Frequency of logging steps
+eval_steps: 600  # Evaluation step frequency
+save_steps: 1000  # Model saving step frequency
+epochs: 2  # Number of training epochs
+batch_size: 2  # Training batch size
+gradient_accumulation_steps: 1  # Gradient accumulation steps
+gradient_checkpointing: true
+trust_remote_code: true  # Trust remote code flag
+save_limit: 1  # Limit for saving models
+fp16: false
+bf16: true
+optimizer: "paged_adamw_32bit"  # Optimizer to use
+
+
+# Additional Model Configuration
+use_int4: true  # Use int4 precision
+use_int8: false  # Use int8 precision
+disable_lora: false  # Disable LoRA
+disable_flash_attention: false  # Disable flash attention
+all_linear: true  # Use LoRA on all linear layers
+pad_token_id: 0 # End of sequence token ID
+add_eos_token: false  # Add EOS token to tokenizer
+add_bos_token: false  # Add BOS token to tokenizer
+add_pad_token: false  # Add PAD token to tokenizer
+padding_side: "right"  # Padding side for tokenizer
+
+# Dataset Handling
+completion_only: false  # Only use completion loss
+wand_db_project: "yi_dpo"  # Wandb project to use
+# datasets:
+#   - path: "argilla/ultrafeedback-binarized-preferences-cleaned"  # Dataset path
+#     split: "train"  # Dataset split
+datasets:
+  - path: "Intel/orca_dpo_pairs"
+  # - path: "unalignment/toxic-dpo-v0.1"
+    split: "train"
+# prepare_data_path: "yi_dpo"
+
