@@ -16,21 +16,45 @@ SUPPORTED_FLASH_MODELS = ["llama", "mistral", "falcon", "mixtral", "opt"]
 logger = get_logger("finetune", "info")
 
 
+# def chatml_format(example):
+#     # Format instruction
+#     prompt = f"<|startoftext|>[INST]{example['system']} {example['question']}[/INST]"
+#     # prompt = f"<|startoftext|>[INST]{example['prompt']}[/INST]"
+
+#     # Format chosen answer
+#     chosen = example["chosen"]
+
+#     # Format rejected answer
+#     rejected = example["rejected"]
+
+#     return {
+#         "prompt": prompt,
+#         "chosen": chosen + "<|endoftext|>",
+#         "rejected": rejected + "<|endoftext|>",
+#     }
+
+
 def chatml_format(example):
+    # Format system
+    if len(example["system"]) > 0:
+        message = {"role": "system", "content": example["system"]}
+        system = f"<|im_start|>system\n{example['system']}<|im_end|>"
+    else:
+        system = ""
+
     # Format instruction
-    prompt = f"<|startoftext|>[INST]{example['system']} {example['question']}[/INST]"
-    # prompt = f"<|startoftext|>[INST]{example['prompt']}[/INST]"
+    prompt = f"<|im_start|>user\n{example['question']}<|im_end|>"
 
     # Format chosen answer
-    chosen = example["chosen"]
+    chosen = example["chosen"] + "<|im_end|>\n"
 
     # Format rejected answer
-    rejected = example["rejected"]
+    rejected = example["rejected"] + "<|im_end|>\n"
 
     return {
-        "prompt": prompt,
-        "chosen": chosen + "<|endoftext|>",
-        "rejected": rejected + "<|endoftext|>",
+        "prompt": system + prompt,
+        "chosen": chosen,
+        "rejected": rejected,
     }
 
 
@@ -104,7 +128,6 @@ if __name__ == "__main__":
     logger.info(f"tokenizer: {tokenizer}")
     model = prepare_model(args, tokenizer)
     ref_model = prepare_model(args, tokenizer)
-    ref_model.config.use_cache = True
 
     target_modules = find_all_linear_names(args, model, add_lm_head=False)
 
