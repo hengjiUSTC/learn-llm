@@ -1,0 +1,73 @@
+# Validation data size ratio
+val_data_size: 0.05
+
+# Model Configuration
+model_name: microsoft/phi-2 # Name of the model
+model_dtype: "bfloat16"
+token: null  # Authentication token, if required
+split_model: false  # Whether to split the model
+
+# Model Training Parameters
+block_size: 1024  # Size of the blocks used in the model
+lora_rank: 64  # LoRA rank
+lora_alpha: 16  # Alpha value for LoRA
+lora_dropout: 0.05  # Dropout rate for LoRA
+learning_rate: 0.0002  # Learning rate
+lr_scheduler_type: "cosine"  # Type of learning rate scheduler
+warmup_steps: 200  # Number of warmup steps
+weight_decay: 0.05  # Weight decay factor
+output_dir: "./phi2_dolly"  # Directory to save model checkpoints
+log_steps: 600  # Frequency of logging steps
+eval_steps: 600  # Evaluation step frequency
+save_steps: 1000  # Model saving step frequency
+epochs: 2  # Number of training epochs
+batch_size: 1  # Training batch size
+gradient_accumulation_steps: 2  # Gradient accumulation steps
+gradient_checkpointing: false  # Enable gradient checkpointing
+trust_remote_code: true  # Trust remote code flag
+save_limit: 1  # Limit for saving models
+fp16: false
+bf16: true
+optimizer: "paged_adamw_8bit"  # Optimizer to use
+
+# Additional Model Configuration
+use_int4: true  # Use int4 precision
+use_int8: false  # Use int8 precision
+disable_lora: false  # Disable LoRA
+disable_flash_attention: false  # Disable flash attention
+all_linear: true  # Use LoRA on all linear layers
+pad_token_id: null # End of sequence token ID
+add_eos_token: false  # Add EOS token to tokenizer
+add_bos_token: false  # Add BOS token to tokenizer
+add_pad_token: false  # Add PAD token to tokenizer
+padding_side: null  # Padding side for tokenizer
+packing: false
+
+# Dataset Handling
+completion_only: false  # Only use completion loss
+wand_db_project: "phi2_dolly"  # Wandb project to use
+datasets:
+  - path: "databricks/databricks-dolly-15k"  # Dataset path
+    split: "train"  # Dataset split
+    handler: "handle_instruction_dolly_dataset"
+    fields: "instruction;context;response"
+    format: |
+      <|im_start|>system
+      {instruction}<|im_end|>
+      <|im_start|>user
+      {context}<|im_end|>
+      <|im_start|>assistant
+      {response}<|im_end|>
+    format_no_input: |
+      <|im_start|>system
+      {instruction}<|im_end|>
+      <|im_start|>assistant
+      {response}<|im_end|>
+prepare_data_path: "phi2_dolly_data"
+
+special_tokens:
+  eos_token: "<|im_end|>"
+  pad_token: "<|endoftext|>"
+custom_tokens:
+  - "<|im_start|>"
+chat_template: "{% if not add_generation_prompt is defined %}{% set add_generation_prompt = false %}{% endif %}{% for message in messages %}{{'<|im_start|>' + message['role'] + ' ' + message['content'] + '<|im_end|>' + ' '}}{% endfor %}{% if add_generation_prompt %}{{ '<|im_start|>assistant ' }}{% endif %}"
