@@ -14,7 +14,6 @@ Please cite the contexts with the reference numbers, in the format [citation:x:u
 You can use provided tools to help you answer the question.
 '''
 
-os.environ["TAVILY_API_KEY"] = "your_tavily_api_key"
 
 tools = [GoogleSearchAPIWrapper()]
 llm = ChatGoogleGenerativeAI(
