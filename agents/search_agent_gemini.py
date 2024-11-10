@@ -1,7 +1,7 @@
 import os
-from langchain_openai import ChatOpenAI
+from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain.agents import AgentExecutor
-from langchain_community.tools.tavily_search import TavilySearchResults
+from langchain_google_community import GoogleSearchAPIWrapper
 from langchain.agents import create_openai_functions_agent
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 
@@ -16,10 +16,13 @@ You can use provided tools to help you answer the question.
 
 os.environ["TAVILY_API_KEY"] = "your_tavily_api_key"
 
-tools = [TavilySearchResults(max_results=5)]
-llm = ChatOpenAI(
-    api_key="your_api_key",
-    model="gpt-4",
+tools = [GoogleSearchAPIWrapper()]
+llm = ChatGoogleGenerativeAI(
+    model="gemini-1.5-pro",
+    temperature=0,
+    max_tokens=None,
+    timeout=None,
+    max_retries=2,
 )
 
 prompt = ChatPromptTemplate.from_messages(

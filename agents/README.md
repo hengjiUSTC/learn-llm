@@ -2,9 +2,9 @@
 
 ## Descriptions
 
-- search_agent.py: Agent able to seach web when asked questions
-- persionalized_agent.py: Agent with personalized longterm memory. Know you better! Ref: [MemGpt](https://memgpt.ai)
-- chatGPT_memory_agent.py: Agent to reproduce chatGpt persionalized memory system.
+- search_agent.py, search_agent_gemini.py: Agent able to seach web when asked questions
+- persionalized_agent.py, gemini_personalized_agent.py: Agent with personalized longterm memory. Know you better! Ref: [MemGpt](https://memgpt.ai)
+- chatGPT_memory_agent.py, gemini_memory_agent.py: Agent to reproduce chatGpt persionalized memory system.
 
 ## How to Use
 
@@ -18,5 +18,16 @@ llm = ChatOpenAI(
     model="gpt-4"
 )
 ```
+
+- enter gemini api key
+
+```
+import getpass
+import os
+
+if "GOOGLE_API_KEY" not in os.environ:
+    os.environ["GOOGLE_API_KEY"] = getpass.getpass("Enter your Google AI API key: ")
+```
+
 
 - run it! `python3 xxx.py`
